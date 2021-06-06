@@ -19,6 +19,7 @@ repositories {
 }
 
 dependencies {
+    implementation(fileTree("libs"))
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
@@ -27,6 +28,7 @@ dependencies {
     implementation("org.springframework.cloud:spring-cloud-starter")
     implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("io.springfox:springfox-boot-starter:3.0.0")
+    implementation("io.johnsonlee:trace-parser:1.10.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
@@ -60,5 +62,5 @@ val jar by tasks.getting(Jar::class) {
 val bootJar by tasks.getting(BootJar::class) {
     enabled = true
     archiveFileName.set("app.jar")
-    mainClass.set("io.johnsonlee.springboot.starter.StarterApplicationKt")
+    mainClass.set("io.johnsonlee.retracer.RetracerKt")
 }

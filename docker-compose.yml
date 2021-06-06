@@ -5,7 +5,9 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
-    ports:
-      - "8080:8080"
     environment:
       - SPRING_PROFILE=prod
+    ports:
+      - "8080:8080"
+    volumes:
+      - "./data:/data"

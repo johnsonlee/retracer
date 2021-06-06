@@ -1,0 +1,11 @@
+version: "3.0"
+
+services:
+  r8:
+    image: johnsonlee/gradle-6.9:latest
+    volumes:
+      - "./r8:/r8"
+    working_dir: /r8
+    entrypoint:
+      - "/opt/gradlew"
+      - "r8WithDeps"
