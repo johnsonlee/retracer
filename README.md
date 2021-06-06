@@ -8,6 +8,12 @@ Retracer is a high performance, and near realtime REST API which used for Java/A
 docker-compose up -d --build
 ```
 
+or run from remote docker image directly
+
+```bash
+docker run johnsonlee/retracer:latest
+```
+
 Then open http://localhost:8080/swagger-ui/ with browser to have a trial
 
 ## Build R8
