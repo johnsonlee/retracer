@@ -25,18 +25,18 @@ class SymbolController(
         @Autowired private val proguardService: ProguardService
 ) {
 
-    @PostMapping("/{appId}")
+    @PostMapping("/{appId}/{appVersionName}/{appVersionCode}")
     fun upload(
             @NotBlank
             @PathVariable("appId")
             appId: String,
 
             @Pattern(regexp = REGEXP_SEMVER)
-            @RequestParam("appVersionName")
+            @PathVariable("appVersionName")
             appVersionName: String,
 
             @Min(1L)
-            @RequestParam("appVersionCode")
+            @PathVariable("appVersionCode")
             appVersionCode: Long,
 
             @RequestParam("file")
