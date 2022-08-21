@@ -1,41 +1,35 @@
 package io.johnsonlee.retracer.r8.service
 
-import com.android.tools.r8.DiagnosticsHandler
-import com.android.tools.r8.retrace.RetraceCommand
-import com.android.tools.r8.retrace.StringRetrace
+import io.johnsonlee.android.trace.JavaStackFrame
+import io.johnsonlee.android.trace.NativeStackFrame
+import io.johnsonlee.android.trace.identifyRootCause
 import io.johnsonlee.retracer.r8.dto.StackTraceDTO
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
 
 @Service
 class RetraceService(
-        @Autowired private val diagnosticsHandler: DiagnosticsHandler,
-        @Autowired private val proguardService: ProguardService
+        @Autowired private val retraceProvider: RetraceProvider,
 ) {
 
-    private val logger: Logger = LoggerFactory.getLogger(javaClass)
-
-    private val cache: MutableMap<String, StringRetrace> = mutableMapOf()
-
     fun retrace(appId: String, appVersionName: String, appVersionCode: Long, dto: StackTraceDTO): StackTraceDTO {
-        val producer = proguardService.getProguardMapProducer(appId, appVersionName, appVersionCode)
-        val cmd = RetraceCommand.builder(diagnosticsHandler)
-                .setStackTrace(emptyList())
-                .setProguardMapProducer(producer)
-                .setRetracedStackTraceConsumer {
-                    it.joinToString("\n")
-                }.build()
-
-        val retraced = synchronized(cache) {
-            cache.getOrPut("${appId}:${appVersionName}:${appVersionCode}") {
-                StringRetrace.create(cmd.options)
-            }.retrace(dto.stackTrace.split("\n"))
+        val retrace = retraceProvider[appId, appVersionName, appVersionCode]
+        val stackTrace = retrace.retrace(dto.stackTrace.split('\n')).joinToString("\n")
+        val lines = stackTrace.split('\n')
+        val rootCause = identifyRootCause(lines)
+        val (symbol, scope) = when (rootCause) {
+            is JavaStackFrame -> Triple(rootCause.sourceFile, rootCause.lineNumber, rootCause.methodName) to "java"
+            is NativeStackFrame -> Triple(rootCause.mapName, rootCause.functionOffset, rootCause.functionName) to "native"
+            else -> Triple(null, null, null) to "unknown"
         }
-
         return StackTraceDTO(
-                stackTrace = retraced.joinToString("\n")
+                stackTrace = stackTrace,
+                fingerprint = rootCause?.fingerprint ?: dto.fingerprint,
+                rootCause = rootCause.toString(),
+                fileName = symbol.first,
+                fileLine = symbol.second?.toString(),
+                functionName = symbol.third,
+                scope = scope
         )
     }
 

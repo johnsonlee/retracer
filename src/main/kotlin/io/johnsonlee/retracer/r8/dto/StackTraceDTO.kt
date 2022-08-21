@@ -11,5 +11,19 @@ data class StackTraceDTO(
         val fingerprint: String? = null,
 
         @JsonInclude(JsonInclude.Include.NON_NULL)
-        val rootCause: String? = null
+        val rootCause: String? = null,
+
+        val fileName: String? = null,
+
+        val fileLine: String? = null,
+
+        val functionName: String? = null,
+
+        /**
+         * One of the following:
+         * - java
+         * - native
+         * - kernel
+         */
+        val scope: String? = null
 )

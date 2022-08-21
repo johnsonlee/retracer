@@ -20,15 +20,16 @@ repositories {
 
 dependencies {
     implementation(fileTree("libs"))
-    implementation("org.jetbrains.kotlin:kotlin-reflect")
-    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+    implementation(kotlin("stdlib"))
+    implementation(kotlin("reflect"))
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.4.3")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.cloud:spring-cloud-starter")
     implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("io.springfox:springfox-boot-starter:3.0.0")
-    implementation("io.johnsonlee:trace-parser:1.10.0")
+    implementation("io.johnsonlee:trace-parser:1.11.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
