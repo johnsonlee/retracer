@@ -4,7 +4,8 @@ import com.android.tools.r8.Version
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.ObjectNode
 import io.johnsonlee.retracer.REGEXP_SEMVER
-import io.johnsonlee.retracer.r8.service.ProguardService
+import io.johnsonlee.retracer.config.RetraceConfig
+import io.johnsonlee.retracer.r8.service.RetraceProvider
 import io.johnsonlee.retracer.r8.service.RetraceService
 import io.swagger.annotations.Api
 import org.springframework.beans.factory.annotation.Autowired
@@ -24,31 +25,36 @@ import javax.validation.constraints.Pattern
 @RequestMapping("/api/retrace/r8")
 @Validated
 class RetraceController(
-        @Autowired private val retraceService: RetraceService,
-        @Autowired private val proguardService: ProguardService
+    @Autowired private val retraceService: RetraceService,
+    @Autowired private val retraceProvider: RetraceProvider,
+    @Autowired private val retraceOptions: RetraceConfig.Options
 ) {
 
     @GetMapping("/")
-    fun version(): Any {
-        return mapOf("version" to Version.getVersionString())
-    }
+    fun info() = mapOf(
+        "version" to Version.getVersionString(),
+        "caches" to retraceProvider.caches,
+        "cacheDir" to retraceOptions.dataDir,
+        "minCacheSize" to retraceOptions.minCacheSize,
+        "maxCacheSize" to retraceOptions.maxCacheSize,
+    )
 
     @PostMapping("/{appId}/{appVersionName}/{appVersionCode}")
     fun retrace(
-            @NotBlank
-            @PathVariable("appId")
-            appId: String,
+        @NotBlank
+        @PathVariable("appId")
+        appId: String,
 
-            @Pattern(regexp = REGEXP_SEMVER)
-            @PathVariable("appVersionName")
-            appVersionName: String,
+        @Pattern(regexp = REGEXP_SEMVER)
+        @PathVariable("appVersionName")
+        appVersionName: String,
 
-            @Min(1L)
-            @PathVariable("appVersionCode")
-            appVersionCode: Long,
+        @Min(1L)
+        @PathVariable("appVersionCode")
+        appVersionCode: Long,
 
-            @RequestBody
-            body: ObjectNode
+        @RequestBody
+        body: ObjectNode
     ): JsonNode = retraceService.retrace(appId, appVersionName, appVersionCode, body)
 
 }
