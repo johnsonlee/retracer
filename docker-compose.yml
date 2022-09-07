@@ -2,7 +2,7 @@ version: "3.0"
 
 services:
   app:
-    image: johnsonlee/retracer:0.2.0
+    image: ghcr.io/johnsonlee/retracer:latest
     build:
       context: .
       dockerfile: ./Dockerfile
