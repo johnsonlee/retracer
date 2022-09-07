@@ -11,14 +11,7 @@ docker-compose up -d --build
 or run from remote docker image directly
 
 ```bash
-docker run johnsonlee/retracer:latest
+docker run -p 8080:8080 ghcr.io/johnsonlee/retracer
 ```
 
 Then open http://localhost:8080/swagger-ui/ with browser to have a trial
-
-## Build R8
-
-```bash
-git submodule init
-docker-compose -f docker-compose.r8.yml up
-```
