@@ -11,12 +11,12 @@ import org.springframework.stereotype.Service
 
 @Service
 class RetraceService(
-        @Autowired private val retraceProvider: RetraceProvider,
+    @Autowired private val retraceProvider: RetraceProvider,
 ) {
 
     fun retrace(appId: String, appVersionName: String, appVersionCode: Long, body: ObjectNode): JsonNode = body.apply {
         val data = body.get(KEY_DATA) as? ObjectNode ?: return@apply
-        val stackTrace = data.get(KEY_DATA_STACK_TRACE).asText().split("\n")
+        val stackTrace = data.get(KEY_DATA_STACK_TRACE)?.asText()?.split("\n") ?: return@apply
         val retraced = retraceProvider[appId, appVersionName, appVersionCode].retrace(stackTrace).joinToString("\n")
         val lines = retraced.split('\n')
         val rootCause = identifyRootCause(lines)
@@ -25,6 +25,7 @@ class RetraceService(
             data.put(KEY_DATA_ROOT_CAUSE, it.toString())
         }
         data.put(KEY_DATA_FINGERPRINT, rootCause?.fingerprint ?: retraced.md5())
+        data.put(KEY_DATA_STACK_TRACE, retraced)
 
         when (rootCause) {
             is JavaStackFrame -> {
