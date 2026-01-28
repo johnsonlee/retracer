@@ -1,4 +1,3 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.springframework.boot.gradle.tasks.bundling.BootJar
 
 plugins {
@@ -6,9 +5,9 @@ plugins {
     kotlin("plugin.spring") version embeddedKotlinVersion
     kotlin("plugin.jpa") version embeddedKotlinVersion
 
-    id("org.springframework.boot") version "2.5.0"
-    id("io.spring.dependency-management") version "1.0.11.RELEASE"
-    id("me.champeau.gradle.jmh") version "0.5.0"
+    id("org.springframework.boot") version "3.4.2"
+    id("io.spring.dependency-management") version "1.1.7"
+    id("me.champeau.jmh") version "0.7.2"
 }
 
 group = "io.johnsonlee.springboot"
@@ -22,13 +21,13 @@ dependencies {
     implementation(fileTree("libs"))
     implementation(kotlin("stdlib"))
     implementation(kotlin("reflect"))
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.4.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.cloud:spring-cloud-starter")
     implementation("io.micrometer:micrometer-registry-prometheus")
-    implementation("io.springfox:springfox-boot-starter:3.0.0")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.4")
     implementation("io.johnsonlee:trace-parser:1.11.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
@@ -36,14 +35,13 @@ dependencies {
 
 dependencyManagement {
     imports {
-        mavenBom("org.springframework.cloud:spring-cloud-dependencies:2020.0.3")
+        mavenBom("org.springframework.cloud:spring-cloud-dependencies:2024.0.0")
     }
 }
 
-tasks.withType<KotlinCompile> {
-    kotlinOptions {
-        freeCompilerArgs = listOf("-Xjsr305=strict")
-        jvmTarget = "1.8"
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.add("-Xjsr305=strict")
     }
 }
 
@@ -52,8 +50,9 @@ tasks.withType<Test> {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
 }
 
 val jar by tasks.getting(Jar::class) {

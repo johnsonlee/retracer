@@ -2,7 +2,7 @@ package io.johnsonlee.retracer.r8.controller
 
 import io.johnsonlee.retracer.REGEXP_SEMVER
 import io.johnsonlee.retracer.r8.service.ProguardService
-import io.swagger.annotations.Api
+import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Controller
 import org.springframework.validation.annotation.Validated
@@ -12,11 +12,11 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
-import javax.validation.constraints.Min
-import javax.validation.constraints.NotBlank
-import javax.validation.constraints.Pattern
+import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Pattern
 
-@Api("Symbol Management")
+@Tag(name = "Symbol Management")
 @Controller
 @RestController
 @RequestMapping("/api/symbol/r8")
