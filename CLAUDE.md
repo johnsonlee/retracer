@@ -34,10 +34,16 @@ retracer/
 │       │   ├── RetraceController.kt    # POST /api/retrace/r8/{appId}/{version}/{code}
 │       │   ├── SymbolController.kt     # POST /api/symbol/r8/{appId}/{version}/{code}
 │       │   └── PrometheusController.kt # GET /metrics
-│       └── service/
-│           ├── RetraceService.kt       # Core retracing logic
-│           ├── RetraceProvider.kt      # LRU cache management
-│           └── ProguardService.kt      # Mapping file handling
+│       ├── service/
+│       │   ├── RetraceService.kt       # Core retracing logic
+│       │   ├── RetraceProvider.kt      # LRU cache management
+│       │   └── ProguardService.kt      # Mapping file handling
+│       └── partition/                  # Partitioned mapping for large files
+│           ├── MappingIndex.kt             # Index: class name → file offset
+│           ├── MappingIndexBuilder.kt      # Builds index from mapping file
+│           ├── PartitionedClassNameMapper.kt # Lazy loading with LRU cache
+│           ├── PartitionedRetracer.kt      # Retracer using partitioned mapper
+│           └── PartitionedStringRetrace.kt # StringRetrace for partitioned mode
 ├── r8/                          # Git submodule (custom R8 fork)
 ├── libs/r8.jar                  # Pre-built R8 library (3.0.78)
 ├── data/                        # ProGuard mapping files storage
@@ -83,6 +89,14 @@ cp r8/build/libs/r8_with_deps.jar libs/r8.jar
 - **Cache size**: min 5, max 20 app versions (configurable)
 - **Port**: 8080 (default)
 
+### Partitioned Mapping Configuration
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `retracer.usePartitionedMapping` | `true` | Enable partitioned mode for large files |
+| `retracer.partitionedThresholdMb` | `50` | File size threshold (MB) to trigger partitioned mode |
+| `retracer.maxCachedClassesPerMapping` | `1000` | Max class mappings cached per file in partitioned mode |
+
 ### Profiles
 
 - `dev`: Trace-level logging for debugging
@@ -95,6 +109,91 @@ cp r8/build/libs/r8_with_deps.jar libs/r8.jar
 3. **Pre-loading**: Top N versions pre-loaded on startup
 4. **Fingerprinting**: MD5 hash for crash grouping
 5. **Root Cause Analysis**: Uses `trace-parser` library
+6. **Partitioned Mapping**: Memory-efficient handling of large mapping files (see below)
+
+## Partitioned Mapping Implementation
+
+For large mapping files (100MB+), loading the entire file into memory is inefficient. The partitioned mapping system solves this by lazy-loading class mappings on demand.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        RetraceProvider                          │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ File size < 50MB? → Standard StringRetrace (full load)    │  │
+│  │ File size ≥ 50MB? → PartitionedStringRetrace (lazy load)  │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+            ┌─────────────────┴─────────────────┐
+            ▼                                   ▼
+┌─────────────────────┐             ┌─────────────────────────────┐
+│  Standard Mode      │             │  Partitioned Mode           │
+│  (R8 StringRetrace) │             │  ┌───────────────────────┐  │
+│                     │             │  │ MappingIndex          │  │
+│  - Full file load   │             │  │ (class → byte offset) │  │
+│  - ~2x file size    │             │  └───────────┬───────────┘  │
+│    in memory        │             │              │              │
+└─────────────────────┘             │              ▼              │
+                                    │  ┌───────────────────────┐  │
+                                    │  │ PartitionedClassMap   │  │
+                                    │  │ - RandomAccessFile    │  │
+                                    │  │ - LRU cache (1000)    │  │
+                                    │  └───────────┬───────────┘  │
+                                    │              │              │
+                                    │              ▼              │
+                                    │  ┌───────────────────────┐  │
+                                    │  │ On retrace request:   │  │
+                                    │  │ 1. Parse stack trace  │  │
+                                    │  │ 2. Extract class names│  │
+                                    │  │ 3. Load only needed   │  │
+                                    │  │    classes from file  │  │
+                                    │  │ 4. Delegate to R8     │  │
+                                    │  └───────────────────────┘  │
+                                    └─────────────────────────────┘
+```
+
+### How It Works
+
+1. **Index Building** (`MappingIndexBuilder`):
+   - Scans the mapping file once to identify class boundaries
+   - Class lines match pattern: `original.Class -> obfuscated.Class:`
+   - Records byte offset and length for each class
+   - Saves index to `mapping.idx` for fast subsequent loads
+
+2. **Index Structure** (`MappingIndex`):
+   - Maps obfuscated class name → `(originalName, byteOffset, byteLength)`
+   - Binary serialization for fast loading (~50 bytes per class)
+   - Validates against mapping file timestamp/size
+
+3. **Lazy Loading** (`PartitionedClassNameMapper`):
+   - Uses `RandomAccessFile` to seek directly to class positions
+   - LRU cache holds recently used `ClassNamingForNameMapper` instances
+   - Loads class mapping by reading bytes at recorded offset
+
+4. **Retrace Flow** (`PartitionedStringRetrace`):
+   - Parses incoming stack trace to extract class names
+   - Loads only the referenced classes from the file
+   - Creates minimal `ClassNameMapper` with just those classes
+   - Delegates to R8's `StringRetrace` for actual retracing
+
+### Performance Characteristics
+
+| Metric | Standard Mode | Partitioned Mode |
+|--------|---------------|------------------|
+| Memory per 200MB mapping | ~400MB | ~5MB index + ~50MB LRU |
+| Initial load time | ~10s | <1s (index only) |
+| First retrace | Fast | Slightly slower |
+| Subsequent retrace | Fast | Fast (cached) |
+
+### File Structure
+
+```
+/data/{appId}/{version}/{code}/
+├── mapping.txt    # Original R8/ProGuard mapping file
+└── mapping.idx    # Binary index (auto-generated)
+```
 
 ## Git Submodule
 
