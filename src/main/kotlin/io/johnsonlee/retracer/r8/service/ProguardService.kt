@@ -22,10 +22,17 @@ class ProguardService(
 
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
 
+    /**
+     * Get the mapping file for the given app version.
+     */
+    fun getMappingFile(appId: String, appVersionName: String, appVersionCode: Long): File {
+        val dir = File(dataDir, arrayOf(appId, appVersionName, appVersionCode).joinToString(File.separator))
+        return File(dir, MAPPING_TXT)
+    }
+
     @Synchronized
     fun getProguardMapProducer(appId: String, appVersionName: String, appVersionCode: Long): ProguardMapProducer {
-        val dir = File(dataDir, arrayOf(appId, appVersionName, appVersionCode).joinToString(File.separator))
-        val mapping = File(dir, MAPPING_TXT)
+        val mapping = getMappingFile(appId, appVersionName, appVersionCode)
         return if (!mapping.exists()) {
             logger.error("$mapping doesn't exist")
             ProguardMapProducer.fromString("")

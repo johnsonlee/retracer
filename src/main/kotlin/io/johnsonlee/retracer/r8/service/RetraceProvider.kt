@@ -5,6 +5,7 @@ import com.android.tools.r8.retrace.RetraceCommand
 import com.android.tools.r8.retrace.StringRetrace
 import io.johnsonlee.retracer.MAPPING_TXT
 import io.johnsonlee.retracer.config.RetraceConfig
+import io.johnsonlee.retracer.r8.partition.PartitionedStringRetrace
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.mapNotNull
@@ -17,6 +18,29 @@ import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import org.springframework.util.ConcurrentLruCache
+import java.io.Closeable
+import java.io.File
+
+/**
+ * Functional interface for retracing stack traces.
+ * This allows both StringRetrace and PartitionedStringRetrace to be used interchangeably.
+ */
+fun interface RetraceFunction {
+    fun retrace(stackTrace: List<String>): List<String>
+}
+
+/**
+ * Wrapper for holding a retrace function along with optional closeable resource.
+ */
+private class RetraceHolder(
+    val retraceFunction: RetraceFunction,
+    private val closeable: Closeable? = null
+) : RetraceFunction, Closeable {
+    override fun retrace(stackTrace: List<String>): List<String> = retraceFunction.retrace(stackTrace)
+    override fun close() {
+        closeable?.close()
+    }
+}
 
 @Service
 class RetraceProvider(
@@ -25,8 +49,10 @@ class RetraceProvider(
     @Autowired private val options: RetraceConfig.Options
 ) {
 
+    private val logger: Logger = LoggerFactory.getLogger(javaClass)
+
     private val loader: RetraceLoader by lazy {
-        RetraceLoader(diagnosticsHandler, proguardService)
+        RetraceLoader(diagnosticsHandler, proguardService, options)
     }
 
     private val cache = ConcurrentLruCache(options.maxCacheSize, loader)
@@ -34,7 +60,7 @@ class RetraceProvider(
     val caches: List<String>
         get() = loadCache().filter(cache::contains).map(CacheKey::toString)
 
-    operator fun get(appId: String, appVersionName: String, appVersionCode: Long): StringRetrace {
+    operator fun get(appId: String, appVersionName: String, appVersionCode: Long): RetraceFunction {
         val key = CacheKey(appId, appVersionName, appVersionCode)
         return cache.get(key)
     }
@@ -84,12 +110,40 @@ private val CacheKey.mappingPath
 
 private data class RetraceLoader(
     val diagnosticsHandler: DiagnosticsHandler,
-    val proguardService: ProguardService
-) : java.util.function.Function<CacheKey, StringRetrace> {
+    val proguardService: ProguardService,
+    val options: RetraceConfig.Options
+) : java.util.function.Function<CacheKey, RetraceHolder> {
 
     private val logger: Logger = LoggerFactory.getLogger(javaClass)
 
-    override fun apply(key: CacheKey): StringRetrace {
+    override fun apply(key: CacheKey): RetraceHolder {
+        val mappingFile = proguardService.getMappingFile(key.appId, key.appVersionName, key.appVersionCode)
+
+        return if (shouldUsePartitionedMode(mappingFile)) {
+            createPartitionedRetrace(key, mappingFile)
+        } else {
+            createStandardRetrace(key)
+        }
+    }
+
+    /**
+     * Determine whether to use partitioned mode based on file size and configuration.
+     */
+    private fun shouldUsePartitionedMode(mappingFile: File): Boolean {
+        if (!options.usePartitionedMapping) {
+            return false
+        }
+        if (!mappingFile.exists()) {
+            return false
+        }
+        val thresholdBytes = options.partitionedThresholdMb.toLong() * 1024 * 1024
+        return mappingFile.length() > thresholdBytes
+    }
+
+    /**
+     * Create a standard StringRetrace that loads the entire mapping file.
+     */
+    private fun createStandardRetrace(key: CacheKey): RetraceHolder {
         val producer = proguardService.getProguardMapProducer(key.appId, key.appVersionName, key.appVersionCode)
         val cmd = RetraceCommand.builder(diagnosticsHandler)
             .setStackTrace(emptyList())
@@ -97,10 +151,28 @@ private data class RetraceLoader(
             .setRetracedStackTraceConsumer {
                 it.joinToString("\n")
             }.build()
-        logger.info("Caching ${key.mappingPath} ...")
-        return StringRetrace.create(cmd.options).apply {
+        logger.info("Caching ${key.mappingPath} (standard mode) ...")
+        val stringRetrace = StringRetrace.create(cmd.options).apply {
             retrace(listOf(""))
         }
+        return RetraceHolder(
+            retraceFunction = { stackTrace -> stringRetrace.retrace(stackTrace) }
+        )
     }
 
+    /**
+     * Create a partitioned StringRetrace that loads class mappings on-demand.
+     */
+    private fun createPartitionedRetrace(key: CacheKey, mappingFile: File): RetraceHolder {
+        logger.info("Caching ${key.mappingPath} (partitioned mode, ${mappingFile.length() / 1024 / 1024}MB) ...")
+        val partitionedRetrace = PartitionedStringRetrace.create(
+            mappingFile = mappingFile,
+            diagnosticsHandler = diagnosticsHandler,
+            maxCachedClasses = options.maxCachedClassesPerMapping
+        )
+        return RetraceHolder(
+            retraceFunction = { stackTrace -> partitionedRetrace.retrace(stackTrace) },
+            closeable = partitionedRetrace
+        )
+    }
 }
